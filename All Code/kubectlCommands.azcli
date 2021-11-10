@@ -1,0 +1,507 @@
+az login --username admin@
+az account set -s "eed27f33-cd8b-4dda-a7fb-4616d20c3ac9"
+az account show
+
+##Login to the cluster:
+az aks get-credentials --resource-group dev --name devaks
+
+az aks get-credentials --resource-group dev --name devaks --overwrite-existing
+
+az aks get-credentials --resource-group dev --name devaks --admin
+
+##Namespaces:
+kubectl get namespaces
+kubectl get namespaces --show-labels
+#create namespace
+kubectl create namespace dev
+kubectl create -f ./Namespace/namespace.yml
+kubectl apply -f ./Namespace/namespace.yml
+kubectl edit namespace demo
+
+## PODS:
+#default namespace
+kubectl apply -f POD/pod.yml
+kubectl get pods
+kubectl get pods -o wide
+kubectl describe pods static-web
+kubectl delete -f POD/pod.yml
+
+
+#seperate namespace
+kubectl create -f ./Namespace/namespace-test.yml
+kubectl apply -f POD/pod1.yml
+kubectl delete -f POD/pod1.yml
+kubectl create -f POD/pod.yml --namespace=test
+kubectl get pods --namespace=test
+kubectl get pods -o wide
+kubectl describe pods static-web
+kubectl delete -f POD/pod1.yml
+
+
+
+##ReplicaSet
+kubectl apply -f ./ReplicaSet/replicaset.yml
+kubectl get rs 
+#(or)
+kubectl get replicaset
+kubectl get rs --namespace=test
+
+##Replicaiton Controller
+kubectl apply -f ./ReplicationController/rc.yml
+kubectl get rc
+#(or)
+kubectl get replicationcontroller
+kubectl get rc -n=demo
+kubectl get pods
+kubectl delete pod <podName>
+## To prove this just go to second terminal and show the terminating status of the pods.
+# To scale up the pods/resources we have to change that in manifest file
+
+wget https://raw.githubusercontent.com/devopsbychandu/kubernetes/master/deployments/deployments.yml
+kubectl apply -f deployments.yml --record=true
+kubectl get deploy
+kubectl rollout status deployment nodeapp
+
+wget https://raw.githubusercontent.com/devopsbychandu/kubernetes/master/services/services.yml
+kubectl apply -f ./deploy/services.yml
+kubectl get svc
+kubectl describe svc nodeapp
+#change the deployment and apply the resutls.
+
+kubectl rollout status deployment nodeapp
+kubectl rollout history deployment nodeapp
+kubectl rollout undo deployment nodeapp
+kubectl rollout undo deployment nodeapp --to-revision=2
+
+
+## Resource Quota's
+kubectl apply -f ./ResourceQuotas/pod-resourcequota.yml
+
+kubectl create namespace quota-mem-cpu-example
+kubectl get resourcequota mem-cpu-demo --namespace=quota-mem-cpu-example --output=yaml
+
+kubectl apply -f ResourceQuotas/quotaPod1.yml --namespace=quota-mem-cpu-example
+kubectl get pod quota-mem-cpu-demo --namespace=quota-mem-cpu-example
+
+kubectl apply -f ResourceQuotas/quotaPod2.yml --namespace=quota-mem-cpu-example
+kubectl get resourcequota mem-cpu-demo --namespace=quota-mem-cpu-example --output=yaml
+
+kubectl describe ns test 
+
+
+
+##Sidecar container
+kubectl apply -f side-car.yml
+kubectl get pods
+kubectl logs pod-with-sidecar #(this will gives us error)
+kubectl logs pod-with-sidecar sidecar-container
+kubectl logs pod-with-sidecar app-container
+
+kubectl exec -it pod-with-sidecar -c app-container sh
+kubectl exec -it pod-with-sidecar -c sidecar-container sh
+
+##attach ACR to AKS
+az aks update -g dev -n devaks --attach-acr democlass
+
+
+
+YkqmwD4SuJebt554m_oFU1QBqEZAVdij_5
+
+aksname="myakscluster"
+
+
+serverApplicationId=$(az ad app create \
+    --display-name "${aksname}Server" \
+    --identifier-uris "https://${aksname}Server" \
+    --query appId -o tsv)
+
+az ad app update --id $serverApplicationId --set groupMembershipClaims=All
+
+az ad sp create --id $serverApplicationId
+
+serverApplicationSecret=$(az ad sp credential reset \
+    --name $serverApplicationId \
+    --credential-description "AKSPassword" \
+    --query password -o tsv)
+
+
+az ad app permission add \
+    --id $serverApplicationId \
+    --api 00000003-0000-0000-c000-000000000000 \
+    --api-permissions e1fe6dd8-ba31-4d61-89e7-88639da4683d=Scope 06da0dbc-49e2-44d2-8312-53f166ab848a=Scope 7ab1d382-f21e-4acd-a863-ba3e13f7da61=Role
+
+az ad app permission grant --id $serverApplicationId --api 00000003-0000-0000-c000-000000000000
+az ad app permission admin-consent --id  $serverApplicationId
+
+
+clientApplicationId=$(az ad app create \
+    --display-name "${aksname}Client" \
+    --native-app \
+    --reply-urls "https://${aksname}Client" \
+    --query appId -o tsv)
+
+az ad sp create --id $clientApplicationId
+
+oAuthPermissionId=$(az ad app show --id $serverApplicationId --query "oauth2Permissions[0].id" -o tsv)
+
+az ad app permission add --id $clientApplicationId --api $serverApplicationId --api-permissions ${oAuthPermissionId}=Scope
+az ad app permission grant --id $clientApplicationId --api $serverApplicationId
+
+az group create --name myResourceGroup --location EastUS
+
+
+tenantId=$(az account show --query tenantId -o tsv)
+
+az aks create \
+    --resource-group myResourceGroup \
+    --name $aksname \
+    --node-count 1 \
+    --generate-ssh-keys \
+    --aad-server-app-id $serverApplicationId \
+    --aad-server-app-secret $serverApplicationSecret \
+    --aad-client-app-id $clientApplicationId \
+    --aad-tenant-id $tenantId
+
+az aks get-credentials --resource-group myResourceGroup --name $aksname --admin
+
+kubectl config current-context
+
+
+kubectl apply -f role.yml 
+kubectl get roles
+kubectl describe roles pod-reader
+
+kubectl apply -f role-binding.yml 
+
+kubectl get rolebindings
+
+az aks get-credentials --resource-group myResourceGroup --name $aksname
+
+##Services
+#https://docs.microsoft.com/en-us/azure/aks/kubernetes-walkthrough
+kubectl get svc --all-namespaces
+kubectl apply -f ./Services/deployclusterIP.yml
+kubectl apply -f ./Services/clusterIP2.yml
+
+kubectl get deploy
+kubectl get svc
+
+kubectl apply -f ./Services/deployLB.yml
+kubectl apply -f ./Services/loadBalencer.yml
+
+kubectl describe svc azure-vote-front
+
+kubectl apply -f ./Services/deployNP.yml
+kubectl apply -f ./Services/nodeport.yml
+kubectl get nodes -o wide
+
+
+##Helm
+#install helm charts
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh
+#some commands
+helm Version
+helm search repo
+helm search repo wordpress
+helm search hub nginx
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm search repo nginx
+helm pull bitnami/nginx --untar=true 
+helm install nginxdemo bitnami/nginx
+
+#create a helm charts
+helm create <helmchartName>
+helm lint ./mycharts/
+helm install --dry-run --debug ./mycharts/ --generate-name
+helm install demo ./mycharts --set service.type=LoadBalancer
+helm list
+kubectl get all
+helm uninstall demonginx ./mycharts
+
+#helm 3 commands
+helm completion bash
+source <(helm completion bash)
+helm create test
+#overwriting
+helm create test
+#take the dependecy from the yml https://github.com/DeekshithSN/Helm_/blob/master/Chart.yaml and add in our project
+helm dep build mycharts
+helm dep list mycharts #list the dependencies fir that chart.
+helm dep update mycharts
+
+helm repo add <url>
+helm install <repoName> --version 2.2
+#env
+helm env
+#get
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install nginxdemo bitnami/nginx
+helm ls
+helm get -h
+helm get all nginxdemo
+helm get manifest nginxdemo
+helm get notes nginxdemo #this is release notes.
+helm get values nginxdemo #values passed at the runtime (--set)
+helm get values nginxdemo -a #values used in the chart (values.yaml)
+#history
+helm history nginxdemo #history of your helm deployments. This may can used of rolebacks.
+helm pull bitnami/nginx --untar=true 
+helm upgrade nginxdemo nginx
+helm history nginxdemo
+helm history nginxdemo -o json #converts the view of the history.
+helm history nginxdemo --max 1 #can see the recent max 1 deployemnt.
+helm history nginxdemo --max 1 -o json
+#install
+helm install demonginx <folder (nginx)> 
+helm install demo nginx
+helm ls
+#delete 
+helm del demonginx nginx
+helm uninstall nginxdemo
+
+helm install demo nginx/ --set service.type=LoadBalancer
+helm install my-argo-cd argo-cd --version 3.24.0 --repo https://argoproj.github.io/argo-helm #or
+helm install argo-cd --version 3.25.0 --repo https://argoproj.github.io/argo-helm --generate-name
+helm install my-argo-cd argo/argo-cd --version 3.25.0
+helm install demonginx nginx --namespace demo
+
+#lint
+helm lint
+helm lint mycharts --strict
+#package
+helm package mycharts
+helm package mycharts --destination /mnt/c/Users/Rehana/Desktop
+helm package mycharts --destination /mnt/c/Users/Rehana/Desktop --version 1.1.2
+helm package mycharts --destination /mnt/c/Users/Rehana/Desktop --version 1.1.2 --dependency-update <packages>
+
+
+
+#plugin
+helm plugin install https://github.com/databus23/helm-diff
+#in values.yml change the replica count to 2.
+helm diff release demo mycharts --values ./mycharts/values.yaml
+helm plugin update diff
+helm plugin list
+helm plugin uninstall diff
+
+#pull
+#helm repo add apache-airflow https://airflow.apache.org/
+#helm install my-airflow apache-airflow/airflow --version 1.2.0
+helm pull airflow --version 1.2.0 --repo https://airflow.apache.org/
+
+helm pull airflow --version 1.2.0 --repo https://airflow.apache.org/ --untar
+
+#Repo:
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo list
+helm repo update
+helm repo update argo
+helm repo remove prometheus-community
+
+#rollback
+helm ls
+helm upgrade demonginx nginx/
+helm ls
+helm rollback <releaseName> <Revision>
+helm rollback demonginx 1
+helm ls
+helm history demonginx
+helm rollback demonginx 1 --force --no-hooks
+
+##search:
+helm search hub nginx
+helm search repo nginx 
+helm search repo nginx --devel
+
+##show
+helm show all test
+helm show chart test
+
+##status 
+helm status demonginx
+helm status demonginx -o json
+
+##template
+helm template test1 test
+helm install nginx --debug --dry-run nginx
+
+#Config Map
+kubectl create configmap <configmapName> <data-source> #data source is file or data.
+#datasource 
+--> from file/dir: --from-file
+--> from key-value pair: --from-literal
+
+kubectl create configmap game-config --from-file=ConfigMap
+kubectl get configmap
+(or)
+kubectl get cm
+kubectl get configmap -o wide
+kubectl get configmap game-config -o yaml
+
+curl -OL https://kubernetes.io/examples/pods/config/redis-config -k
+cat redis-config
+kubectl create configmap example-redis-config --from-file=redis-config
+kubectl create -f pod.yml 
+kubectl exec static-web cat /redis-master/redis.conf
+
+
+#literals  special.how=key very=value
+kubectl create configmap special-configmap --from-literal=special.how=very
+kubectl get configmap
+kubectl create -f busybox.yml
+kubectl logs test pod | grep special
+
+
+## Secrets
+
+
+##Volumes
+
+kubectl exec -it mypod sh
+
+
+
+
+
+##kubeconfig
+kubectl get nodes
+az aks get-credentials --resource-group dev --name devaks --overwrite-existing
+cat /home/cpechet/.kube/config
+kubectl get nodes
+
+#context
+az aks get-credentials --resource-group dev --name devaks --overwrite-existing
+kubectl config get-clusters
+kubectl config get-contexts
+kubectl config current-context
+az aks get-credentials --resource-group dev --name devaks --overwrite-existing --admin
+kubectl config get-clusters
+kubectl config get-contexts
+kubectl config current-context
+az aks get-credentials --resource-group dev --name devaks01 --overwrite-existing --admin
+kubectl config get-clusters
+kubectl config get-contexts
+kubectl config current-context
+
+az aks get-credentials --resource-group dev --name devaks --overwrite-existing
+cp /home/cpechet/.kube/config /home/cpechet/.kube/config.bkp
+kubectl config current-context
+az aks get-credentials --resource-group dev --name devaks --overwrite-existing --admin
+kubectl config current-context
+export KUBECONFIG=/home/cpechet/.kube/config.bkp
+kubectl config current-context
+
+
+##Service Account
+kubectl get sa
+kubectl create namespace dev
+kubectl get sa --namespace=dev  #(A default sa will be created and mounted that into all the pods of the particualar namespace)
+kubectl describe sa default --namespace=dev
+kubectl describe sa default
+kubectl get secrets
+kubectl describe secrets <secretName>
+kubectl apply -f POD/pod.yml
+kubectl get pods
+kubectl describe pods static-web
+# default secrete mount path /var/run/secrets/kubernetes.io/serviceaccount
+kubectl exec -it static-web bash
+#hostname (see what is our current host name)
+--> cd /var/run/secrets/kubernetes.io/serviceaccount
+--> cat token
+## kubectl describe secrets <secretName> == cat token
+
+
+##Ingress
+kubectl apply -f Ingress/app-namespace.yaml
+
+# Deploy the 2 sample apps into Kubernetes
+kubectl apply -f Ingress/app1-LB-deploy-svc.yaml    
+kubectl apply -f Ingress/app2-LB-deploy-svc.yaml
+
+# Get the 2 public IP addresses 
+kubectl get services --namespace app
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm install app-ingress ingress-nginx/ingress-nginx \
+     --namespace ingress \
+     --create-namespace \
+     --set controller.replicaCount=2 \
+     --set controller.nodeSelector."beta\.kubernetes\.io/os"=linux \
+     --set defaultBackend.nodeSelector."beta\.kubernetes\.io/os"=linux
+
+# Delete and redeploy the service for the update to take effect
+kubectl delete -f Ingress/app1-LB-deploy-svc.yaml 
+kubectl delete -f Ingress/app2-LB-deploy-svc.yaml
+
+#deploy the service
+kubectl apply -f Ingress/app1-deploy-svc.yaml 
+kubectl apply -f Ingress/app2-deploy-svc.yaml
+
+kubectl get services --namespace ingress #take the ip and update in the ingress file
+
+# Deploy the Ingress resource into Kubernetes
+kubectl apply -f Ingress/app-ingress.yaml
+
+kubectl get ingress -A  #gets the host (dns record)
+
+# Cleanup resources
+kubectl delete -f Ingress/app1-deploy-svc.yaml 
+kubectl delete -f Ingress/app2-deploy-svc.yaml
+kubectl delete -f Ingress/app-namespace.yaml
+helm delete app-ingress --namespace ingress
+kubectl delete namespace ingress
+
+#**Note: All the services, deployments, and ingress should be there in the same namespace or else this will not work. But ingress controller can be there in the other namespace.**
+
+###SSL-TLS certs
+# Create a namespace for Cert Manager
+kubectl create namespace cert-manager
+
+# Get the Helm Chart for Cert Manager
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+
+# Install Cert Manager using Helm charts
+helm install cert-manager jetstack/cert-manager \
+    --namespace cert-manager \
+    --version v0.14.0 \
+    --set installCRDs=true
+
+# Check the created Pods
+kubectl get pods --namespace cert-manager
+
+kubectl apply --namespace app -f Ingress/ssl-tls-cluster-issuer.yaml
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##certs:
+openssl genrsa -des3 -out server.key 2048 #Devops@123
+KEY_FILE="server.key"
+CERT_FILE="cert.cer"
+HOST="devaks"
+CERT_NAME="tlscert"
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ${KEY_FILE} -out ${CERT_FILE} -subj "/CN=${HOST}/O=${HOST}"
+kubectl create secret tls ${CERT_NAME} --key ${KEY_FILE} --cert ${CERT_FILE} -n=app
+kubectl apply -f Ingress/app-ingress.yaml -n=app

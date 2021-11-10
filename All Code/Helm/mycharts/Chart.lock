@@ -1,0 +1,9 @@
+dependencies:
+- name: appmesh-controller
+  repository: https://aws.github.io/eks-charts
+  version: 0.5.0
+- name: argo-cd
+  repository: https://argoproj.github.io/argo-helm
+  version: 3.24.0
+digest: sha256:cb0c9601716651d7932a8afd503e1909377e46b08ce9b7d83391f0dda1fba68a
+generated: "2021-10-13T17:18:29.2298624+05:30"
